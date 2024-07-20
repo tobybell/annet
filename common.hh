@@ -5,13 +5,13 @@ using isize = signed long;
 
 extern "C" {
 
-void* malloc(usize) noexcept;
-void* calloc(usize, usize) noexcept;
-void* realloc(void*, usize) noexcept;
-void free(void*) noexcept;
-int memcmp(void const*, void const*, usize) noexcept;
-void* memcpy(void*, void const*, usize) noexcept;
-[[noreturn]] void abort() noexcept;
+void* malloc(usize);
+void* calloc(usize, usize);
+void* realloc(void*, usize);
+void free(void*);
+int memcmp(void const*, void const*, usize);
+void* memcpy(void*, void const*, usize);
+[[noreturn]] void abort();
 
 }
 
