@@ -179,20 +179,6 @@ void try_read(i32 fd, PendingRead* pend) {
   kevent(kq, &set, 1, 0, 0, &ts);
 }
 
-void handle_write(kernel_event& e) {
-  println("handle_write ", e.ident, ' ', e.data);
-  i32 fd = i32(e.ident);
-  auto pending = reinterpret_cast<PendingWrite*>(e.udata);
-  try_write(fd, pending);
-}
-
-void handle_read(kernel_event& e) {
-  println("handle_read ", e.ident, ' ', e.data);
-  i32 fd = i32(e.ident);
-  auto pend = reinterpret_cast<PendingRead*>(e.udata);
-  try_read(fd, pend);
-}
-
 u32 allocateClient(u32 fileDescriptor) {
   if (!clientFreeList) {
     u32 newClientId = len(clientToFileDescriptor);
@@ -274,9 +260,8 @@ void handle_accept(kernel_event& e) {
   u32 client = allocateClient(u32(conn));
   setClient(u32(conn), client);
 
-  // add_read_event(conn, handle_read);
-
   // g.joined(client);
+
 
   if (!firstFd) {
     firstFd = conn;
@@ -345,22 +330,25 @@ int main() {
   constexpr auto timeout_s = 5;
 
   while (running) {
-    struct kevent mon;
+    struct kevent e;
     timespec ts {timeout_s, 0};
-    int nev = kevent(kq, 0, 0, &mon, 1, &ts);
+    int nev = kevent(kq, 0, 0, &e, 1, &ts);
     if (nev < 1) {
-      if (running) {
+      if (running)
         printf("No events for last %d seconds.\n", timeout_s);
-      }
       continue;
     }
-    auto f = reinterpret_cast<kernel_event_handler>(mon.udata);
-    if (mon.filter == EVFILT_WRITE) {
-      handle_write(mon);
-    } else if (mon.filter == EVFILT_READ && i32(mon.ident) != acceptor) {
-      handle_read(mon);
+    auto f = reinterpret_cast<kernel_event_handler>(e.udata);
+    if (e.filter == EVFILT_WRITE) {
+      i32 fd = i32(e.ident);
+      auto pending = reinterpret_cast<PendingWrite*>(e.udata);
+      try_write(fd, pending);
+    } else if (e.filter == EVFILT_READ && i32(e.ident) != acceptor) {
+      i32 fd = i32(e.ident);
+      auto pend = reinterpret_cast<PendingRead*>(e.udata);
+      try_read(fd, pend);
     } else {
-      f(mon);
+      f(e);
     }
   }
   println("exiting after interrupt");
