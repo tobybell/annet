@@ -20,44 +20,6 @@ int kq;
 
 using isize = signed long;
 
-// using file_descriptor = int;
-
-// using std::cerr;
-// using std::ostream;
-// using std::endl;
-// using std::forward;
-// using std::string;
-
-// struct chunk {
-//   Str data;
-//   bool eof;  // whether this is last chunk
-// };
-
-
-
-// struct connection {
-//   file_descriptor f_;
-
-//   connection(file_descriptor f): f_(f) {
-//     printf("Create [%d].\n", f_);
-//   }
-//   ~connection() {
-//     printf("Destroy [%d].\n", f_);
-//   }
-//   void read(Str b) {
-//     chunk c = {b.begin(), b.end(), false};
-//     cerr << str(c) << endl;
-//     auto r = parser(c);
-//     if (succeeded(r)) {
-//       printf("[%d]: Yay! Good parsing!", f_);
-//     } else if (failed(r)) {
-//       printf("[%d]: Error! Bad parsing!", f_);
-//     }
-//   }
-// };
-
-// void write(u32 client, Str s);
-
 struct Server {
 
   void joined(u32 client) {
@@ -75,36 +37,6 @@ struct Server {
 };
 
 Server g;
-
-// Function designed for chat between client and server.
-// void func(int sockfd) {
-//   char buff[MAX];
-//   int n;
-//   // infinite loop for chat
-//   for (;;) {
-//     bzero(buff, MAX);
-
-//     // read the message from client and copy it in buffer
-//     kevent(kq, )
-//     read(sockfd, buff, sizeof(buff));
-//     // print buffer which contains the client contents
-//     printf("From client: %s\t To client : ", buff);
-//     bzero(buff, MAX);
-//     n = 0;
-//     // copy server message in the buffer
-//     while ((buff[n++] = getchar()) != '\n')
-//       ;
-
-//     // and send that buffer to client
-//     write(sockfd, buff, sizeof(buff));
-
-//     // if msg contains "Exit" then server exit and chat ended.
-//     if (strncmp("exit", buff, 4) == 0) {
-//       printf("Server Exit...\n");
-//       break;
-//     }
-//   }
-// }
 
 void makeFileDescriptorNonblocking(int fd) {
   int flags = fcntl(fd, F_GETFL, 0);
