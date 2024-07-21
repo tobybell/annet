@@ -1,3 +1,7 @@
+extern "C" {
+#include "annet.h"
+}
+
 #include "common.hh"
 #include "print.hh"
 
@@ -83,15 +87,15 @@ void try_read(i32 fd, PendingRead* pend) {
   kevent(kq, &set, 1, 0, 0, &ts);
 }
 
-void async_write(u32 fd, char const* src, u32 len, void (**cb)(void*, bool)) {
+void an_write(u32 fd, char const* src, u32 len, void (**cb)(void*, bool)) {
   try_write(fd, new PendingWrite {{src, len}, cb});
 }
 
-void async_read(u32 fd, char* dst, u32 len, void (**cb)(void*, u32 n)) {
+void an_read(u32 fd, char* dst, u32 len, void (**cb)(void*, u32 n)) {
   try_read(fd, new PendingRead {{dst, len}, cb});
 }
 
-int listen_tcp(u16 port) {
+int an_listen(u16 port) {
   if (!kq)
     kq = kqueue();
 
@@ -121,7 +125,7 @@ void an_close(unsigned sock) {
   check(!close(i32(sock)));
 }
 
-void run() {
+void an_run() {
   constexpr auto timeout_s = 5;
 
   for (;;) {
@@ -162,7 +166,7 @@ void run() {
 
 }
 
-void async_accept(unsigned server, void (**cb)(void*, int sock)) {
+void an_accept(unsigned server, void (**cb)(void*, int sock)) {
   println("async_accept ", server, ' ', (void*) cb);
   sockaddr_in cli;
   socklen_t len = sizeof(cli);
