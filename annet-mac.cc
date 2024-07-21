@@ -63,28 +63,40 @@ void try_read(i32 fd, PendingRead* pend) {
   Mut<char> s = pend->data;
   isize ret = ::read(fd, s.begin(), len(s));
   auto cb = pend->done;
-  if (ret < 0) {
-    if (errno == EAGAIN) {
-      // pass through, wait for more input
-    } else {
-      println("::read returned negative");
-      (*cb)(cb, 0);
-      free(pend);
-      return;
-    }
-  } else if (0 < ret) {
+  if (ret >= 0) {
     (*cb)(cb, u32(ret));
-    free(pend);
-    return;
-  } else {  // 0 means EOF
+    return free(pend);
+  } else if (errno != EAGAIN) {
     (*cb)(cb, 0);
-    free(pend);
-    return;
+    return free(pend);
   }
-
   struct kevent set {uintptr_t(fd), EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, reinterpret_cast<void*>(pend)};
   timespec ts {};
   kevent(kq, &set, 1, 0, 0, &ts);
+}
+
+void try_accept(unsigned fd, void (**cb)(void*, int sock)) {
+  sockaddr_in cli;
+  socklen_t len = sizeof(cli);
+  int r = accept(fd, (sockaddr*) &cli, &len);
+  if (r < 0 && errno != EWOULDBLOCK)
+    return (*cb)(cb, -1);
+  if (r >= 0) {
+    set_nonblocking(r);
+    return (*cb)(cb, r);
+  }
+  struct kevent set {
+    .ident = uintptr_t(fd),
+    .filter = EVFILT_READ,
+    .flags = EV_ADD | EV_ONESHOT,
+    .udata = (void*) (usize(cb) | 1),
+  };
+  timespec ts {};
+  kevent(kq, &set, 1, 0, 0, &ts);
+}
+
+void an_accept(unsigned server, void (**cb)(void*, int sock)) {
+  try_accept(server, cb);
 }
 
 void an_write(u32 fd, char const* src, u32 len, void (**cb)(void*, bool)) {
@@ -146,39 +158,15 @@ void an_run() {
       auto is_server = udata & 1;
       if (is_server) {
         auto cb = (void (**)(void*, int)) (udata & ~1);
-        i32 f = i32(e.ident);
-        sockaddr_in cli;
-        socklen_t len = sizeof(cli);
-        i32 conn = accept(f, (sockaddr*) &cli, &len);
-        check(conn >= 0);
-        set_nonblocking(conn);
-        (*cb)(cb, conn);
+        i32 fd = i32(e.ident);
+        try_accept(fd, cb);
       } else {
         i32 fd = i32(e.ident);
         auto pend = reinterpret_cast<PendingRead*>(e.udata);
         try_read(fd, pend);
       }
     } else {
-      println("unknown event");
       abort();
     }
   }
-
-}
-
-void an_accept(unsigned server, void (**cb)(void*, int sock)) {
-  println("async_accept ", server, ' ', (void*) cb);
-  sockaddr_in cli;
-  socklen_t len = sizeof(cli);
-  int now = accept(server, (sockaddr*) &cli, &len);
-  if (now >= 0 || errno != EWOULDBLOCK)
-    return (*cb)(cb, now);
-  struct kevent set {
-    .ident = uintptr_t(server),
-    .filter = EVFILT_READ,
-    .flags = EV_ADD | EV_ONESHOT,
-    .udata = (void*) (usize(cb) | 1),
-  };
-  timespec ts {};
-  kevent(kq, &set, 1, 0, 0, &ts);
 }
