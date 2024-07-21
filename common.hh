@@ -573,7 +573,7 @@ struct List {
   }
 };
 
-using String = List<char>;
+using String = Array<char>;
 
 struct RangePtr {
   u32 value;

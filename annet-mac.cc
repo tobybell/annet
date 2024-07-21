@@ -2,63 +2,18 @@
 #include "print.hh"
 
 #include <errno.h>
-#include <netinet/in.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/event.h>
-#include <unistd.h>
 #include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/event.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 int kq;
 
-using isize = signed long;
-
-void makeFileDescriptorNonblocking(int fd) {
+void set_nonblocking(int fd) {
   int flags = fcntl(fd, F_GETFL, 0);
   fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
-
-template <class... T>
-struct Promise {
-  void (*call)(void*, T...);
-  void* obj;
-  template <
-      class F,
-      enable_if<
-          is_invocable<F, T...> && is_move_constructible<F> &&
-          (sizeof(obj) < sizeof(F) || !is_trivially_copyable<F>)> = 0>
-  Promise(F&& f):
-    call([](void* arg, T... args) {
-      auto& fn = *reinterpret_cast<F*>(arg);
-      fn(forward<T>(args)...);
-      fn.~F();
-      free(arg);
-    }),
-    obj(malloc(sizeof(F))) {
-    new (obj) F(move(f));
-  }
-  template <
-      class F,
-      enable_if<
-          is_invocable<F, T...> && is_move_constructible<F> &&
-          sizeof(F) <= sizeof(obj) && is_trivially_copyable<F>> = 0>
-  Promise(F&& f):
-    call([](void* arg, T... args) {
-      auto& fn = *reinterpret_cast<F*>(&arg);
-      fn(forward<T>(args)...);
-      fn.~F();
-    }),
-    obj() {
-    new (&obj) F(move(f));
-  }
-  Promise(Promise const&) = delete;
-  Promise(Promise&& rhs): call(rhs.call), obj(rhs.obj) {
-    rhs.call = 0;
-    rhs.obj = 0;
-  }
-};
 
 struct PendingWrite {
   Str data;
@@ -142,30 +97,28 @@ int listen_tcp(u16 port) {
 
   int acceptor = socket(AF_INET, SOCK_STREAM, 0);
   check(acceptor >= 0);
-  makeFileDescriptorNonblocking(acceptor);
+  set_nonblocking(acceptor);
 
   sockaddr_in servaddr;
   servaddr.sin_family = AF_INET;
   servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
   servaddr.sin_port = htons(port);
 
-  // Binding newly created socket to given IP and verification
   if (bind(acceptor, (sockaddr*)&servaddr, sizeof(servaddr))) {
-    printf("Bind failed.\n");
-    abort();
-  } else {
-    printf("Bound socket.\n");
+    close(acceptor);
+    return -1;
   }
 
-  // Now server is ready to listen and verification
-  if ((listen(acceptor, 5)) != 0) {
-    printf("Listen failed.\n");
-    abort();
-  } else {
-    printf("Server listening on %d.\n", port);
+  if (listen(acceptor, 8)) {
+    close(acceptor);
+    return -1;
   }
 
   return acceptor;
+}
+
+void an_close(unsigned sock) {
+  check(!close(i32(sock)));
 }
 
 void run() {
@@ -176,7 +129,7 @@ void run() {
     timespec ts {timeout_s, 0};
     int nev = kevent(kq, 0, 0, &e, 1, &ts);
     if (nev < 1) {
-      printf("No events for last %d seconds.\n", timeout_s);
+      println("No events for last ", timeout_s, " seconds.");
       continue;
     }
 
@@ -185,16 +138,16 @@ void run() {
       auto pending = reinterpret_cast<PendingWrite*>(e.udata);
       try_write(fd, pending);
     } else if (e.filter == EVFILT_READ) {
-      auto is_server = usize(e.udata) & 1;
+      auto udata = usize(e.udata);
+      auto is_server = udata & 1;
       if (is_server) {
-        auto cb = (void (**)(void*, int)) e.udata;
+        auto cb = (void (**)(void*, int)) (udata & ~1);
         i32 f = i32(e.ident);
         sockaddr_in cli;
         socklen_t len = sizeof(cli);
         i32 conn = accept(f, (sockaddr*) &cli, &len);
         check(conn >= 0);
-        println("-> accept ", conn);
-        makeFileDescriptorNonblocking(conn);
+        set_nonblocking(conn);
         (*cb)(cb, conn);
       } else {
         i32 fd = i32(e.ident);
@@ -210,6 +163,7 @@ void run() {
 }
 
 void async_accept(unsigned server, void (**cb)(void*, int sock)) {
+  println("async_accept ", server, ' ', (void*) cb);
   sockaddr_in cli;
   socklen_t len = sizeof(cli);
   int now = accept(server, (sockaddr*) &cli, &len);
@@ -218,7 +172,7 @@ void async_accept(unsigned server, void (**cb)(void*, int sock)) {
   struct kevent set {
     .ident = uintptr_t(server),
     .filter = EVFILT_READ,
-    .flags = EV_ADD,
+    .flags = EV_ADD | EV_ONESHOT,
     .udata = (void*) (usize(cb) | 1),
   };
   timespec ts {};

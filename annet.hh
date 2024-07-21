@@ -12,4 +12,6 @@ void async_read(
 void async_write(
   unsigned sock, char const* src, unsigned len, void (**cb)(void*, bool err));
 
+void an_close(unsigned sock);
+
 void run();
