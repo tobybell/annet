@@ -5,7 +5,10 @@ project(Annet)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-add_executable(Server2 Server2-mac.cc print.cc)
+add_library(Annet STATIC annet-mac.cc print.cc)
+
+add_executable(Server2 server.cc print.cc)
+target_link_libraries(Server2 PRIVATE Annet)
 
 
 
