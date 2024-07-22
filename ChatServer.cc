@@ -4,11 +4,10 @@
 #include "annet.hh"
 
 struct Outgoing {
-  char* message;
-  u32 length;
+  String message;
   u32 sender;
   u32 n_ref;
-  Outgoing* next;
+  Outgoing* next {};
 };
 
 struct Client {
@@ -24,7 +23,7 @@ u32 check_listen(u16 port) {
 }
 
 struct Server {
-  u32 server = check_listen(8000);
+  u32 server = check_listen(8001);
 
   List<Client> clients;
   Outgoing* tail = new Outgoing {};
@@ -43,13 +42,15 @@ struct Server {
   }
 
   void read_client(u32 id) {
-    char* buf = (char*) malloc(1024);
-    an::read(clients[id].sock, buf, 1024, [this, id, buf](u32 n) mutable {
+    String buf(1024);
+    auto s = buf.begin();
+    an::read(clients[id].sock, s, 1024, [this, id, buf = move(buf)](u32 n) mutable {
       if (!n)
-        return free(buf);  // no more to read
+        return;  // no more to read
 
-      buf = (char*) realloc(buf, n);
-      tail = tail->next = new Outgoing {buf, n, clients[id].sock, 1, nullptr};
+      buf.data = (char*) realloc(buf.data, n);
+      buf.size = n;
+      tail = tail->next = new Outgoing {move(buf), clients[id].sock, 1};
 
       for (u32 i {}; i < len(clients); ++i)
         try_send(i);
@@ -67,15 +68,16 @@ struct Server {
     if (!next)
       return;
     if (--head->n_ref == 0) {
-      free(head->message);
+      --next->n_ref;
       delete head;
     }
     head = next;
     ++head->n_ref;
     if (head->sender == info.sock)
       return try_send(client);
+    auto& msg = head->message;
     info.sending = true;
-    an::write(info.sock, head->message, head->length, [this, client](bool err) {
+    an::write(info.sock, msg.begin(), len(msg), [this, client](bool err) {
       clients[client].sending = false;
       if (err)
         return;
