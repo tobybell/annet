@@ -5,7 +5,7 @@
 
 void echo_client(u32 client, String buf) {
   an::read(client, buf.begin(), len(buf), [client, buf = move(buf)](u32 n) {
-    if (!n) {
+    if (n <= 0) {
       println("close ", client);
       return an::close(client);
     }

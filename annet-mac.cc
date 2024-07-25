@@ -26,34 +26,26 @@ struct PendingWrite {
 
 struct PendingRead {
   Mut<char> data;
-  void (**done)(void*, u32);
+  void (**done)(void*, int);
 };
 
 void try_write(i32 fd, PendingWrite* pend) {
   Str s = pend->data;
   isize write = ::write(fd, s.begin(), len(s));
   auto& cb = pend->done;
-  if (write < 0) {
-    if (errno == EAGAIN) {
-      println("write return EAGAIN");
-      write = 0;
-    } else {
-      println("write returning negative, errno=", errno);
-      (*cb)(cb, true);
-      free(pend);
-      return;
-    }
-  } else {
-    println("successfully wrote ", write);
+  if (write >= 0) {
     if (len(s) <= write) {
       (*cb)(cb, false);
       free(pend);
       return;
     }
+    pend->data.base += u32(write);
+    pend->data.size -= u32(write);
+  } else if (errno != EAGAIN) {
+    (*cb)(cb, true);
+    free(pend);
+    return;
   }
-  
-  pend->data.base += u32(write);
-  pend->data.size -= u32(write);
   struct kevent set {uintptr_t(fd), EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, reinterpret_cast<void*>(pend)};
   timespec ts {};
   kevent(kq, &set, 1, 0, 0, &ts);
@@ -67,7 +59,7 @@ void try_read(i32 fd, PendingRead* pend) {
     (*cb)(cb, u32(ret));
     return free(pend);
   } else if (errno != EAGAIN) {
-    (*cb)(cb, 0);
+    (*cb)(cb, -1);
     return free(pend);
   }
   struct kevent set {uintptr_t(fd), EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, reinterpret_cast<void*>(pend)};
@@ -103,7 +95,7 @@ void an_write(u32 fd, char const* src, u32 len, void (**cb)(void*, bool)) {
   try_write(fd, new PendingWrite {{src, len}, cb});
 }
 
-void an_read(u32 fd, char* dst, u32 len, void (**cb)(void*, u32 n)) {
+void an_read(u32 fd, char* dst, u32 len, void (**cb)(void*, int n)) {
   try_read(fd, new PendingRead {{dst, len}, cb});
 }
 
@@ -138,16 +130,10 @@ void an_close(unsigned sock) {
 }
 
 void an_run() {
-  constexpr auto timeout_s = 5;
-
   for (;;) {
     struct kevent e;
-    timespec ts {timeout_s, 0};
-    int nev = kevent(kq, 0, 0, &e, 1, &ts);
-    if (nev < 1) {
-      println("No events for last ", timeout_s, " seconds.");
-      continue;
-    }
+    int nev = kevent(kq, 0, 0, &e, 1, 0);
+    check(nev >= 0);
 
     if (e.filter == EVFILT_WRITE) {
       i32 fd = i32(e.ident);

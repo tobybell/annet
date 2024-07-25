@@ -32,7 +32,7 @@ inline void accept(unsigned server, Callback<int> cb) {
  an_accept(server, cb.f);
 }
 
-inline void read(unsigned sock, char* dst, unsigned len, Callback<unsigned> cb) {
+inline void read(unsigned sock, char* dst, unsigned len, Callback<int> cb) {
   an_read(sock, dst, len, cb.f);
 }
 

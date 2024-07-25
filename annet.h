@@ -7,7 +7,7 @@ void an_accept(
   unsigned server, void (**cb)(void*, int sock));
 
 void an_read(
-  unsigned sock, char* dst, unsigned len, void (**cb)(void*, unsigned n));
+  unsigned sock, char* dst, unsigned len, void (**cb)(void*, int n));
 
 void an_write(
   unsigned sock, char const* src, unsigned len, void (**cb)(void*, bool err));
