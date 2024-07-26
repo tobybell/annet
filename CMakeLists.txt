@@ -5,7 +5,13 @@ project(Annet)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-add_library(Annet STATIC annet-mac.cc print.cc)
+add_library(Annet STATIC print.cc)
+
+if(APPLE)
+  target_sources(Annet PRIVATE annet-mac.cc)
+elseif(UNIX)
+  target_sources(Annet PRIVATE annet-linux.cc)
+endif()
 
 add_executable(EchoServer EchoServer.cc)
 target_link_libraries(EchoServer PRIVATE Annet)
