@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 add_library(Annet STATIC print.cc)
+target_include_directories(Annet PUBLIC .)
 
 if(APPLE)
   target_sources(Annet PRIVATE annet-mac.cc)
@@ -13,10 +14,10 @@ elseif(UNIX)
   target_sources(Annet PRIVATE annet-linux.cc)
 endif()
 
-add_executable(EchoServer EchoServer.cc)
+add_executable(EchoServer example/EchoServer.cc)
 target_link_libraries(EchoServer PRIVATE Annet)
 
-add_executable(ChatServer ChatServer.cc)
+add_executable(ChatServer example/ChatServer.cc)
 target_link_libraries(ChatServer PRIVATE Annet)
 
 
