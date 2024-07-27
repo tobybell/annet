@@ -67,7 +67,7 @@ struct Server {
 
   void close_client(u32 id) {
     an::close(clients[id].sock);
-    clients[id].sock == ~0u;
+    clients[id].sock = ~0u;
     free_client.push(id);
 
     Print p;
