@@ -14,11 +14,15 @@ extern "C" {
 
 int kq;
 
+enum Direction: u8 {
+  ReadD, WriteD
+};
+
 enum Operation : u32 {
-  Read,
-  Write,
-  Accept,
-  Connect,
+  Read = 0,
+  Write = 0,
+  Accept = 1,
+  Connect = 1,
 };
 
 struct PendingOperation {
@@ -30,8 +34,7 @@ struct PendingOperation {
 
 struct Socket {
   u32 fd;
-  u32 read;
-  u32 write;
+  u32 op[2];
 };
 
 template <class T>
@@ -39,14 +42,15 @@ struct FreeList {
   List<T> list;
   u32 free_head {};
 
-  u32 alloc() {
+  u32 alloc(T&& val) {
     if (free_head) {
       u32 id = free_head - 1;
       free_head = reinterpret_cast<u32&>(list[id]);
+      list[id] = move(val);
       return id;
     } else {
       u32 id = len(list);
-      list.emplace();
+      list.emplace() = move(val);
       return id;
     }
   }
@@ -69,6 +73,14 @@ void set_nonblocking(int fd) {
   fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
+void complete(u32 sock, Direction dir, int result) {
+  u32 op = sockets[sock].op[dir] - 1;
+  sockets[sock].op[dir] = 0;
+  auto cb = pending[op].cb;
+  pending.free(op);
+  return (*cb)(cb, result);
+}
+
 void try_write(u32 sock, u32 op) {
   i32 fd = sockets[sock].fd;
   auto p = pending[op];
@@ -76,18 +88,12 @@ void try_write(u32 sock, u32 op) {
 
   isize r = ::write(fd, p.buf, p.len);
   if (r >= 0) {
-    if (p.len <= r) {
-      sockets[sock].write = 0;
-      pending.free(op);
-      return (*p.cb)(p.cb, false);
-    }
+    if (p.len <= r)
+      return complete(sock, WriteD, 0);
     pending[op].buf += r;
     pending[op].len -= r;
-  } else if (errno != EAGAIN) {
-    sockets[sock].write = 0;
-    pending.free(op);
-    return (*p.cb)(p.cb, true);
-  }
+  } else if (errno != EAGAIN)
+    return complete(sock, WriteD, 1);
   struct kevent set {uintptr_t(fd), EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, (void*) usize(sock)};
   timespec ts {};
   kevent(kq, &set, 1, 0, 0, &ts);
@@ -98,15 +104,10 @@ void try_read(u32 sock, u32 op) {
   PendingOperation p = pending[op];
 
   isize r = ::read(fd, p.buf, p.len);
-  if (r >= 0) {
-    sockets[sock].read = 0;
-    pending.free(op);
-    return (*p.cb)(p.cb, r);
-  } else if (errno != EAGAIN) {
-    sockets[sock].read = 0;
-    pending.free(op);
-    return (*p.cb)(p.cb, -1);
-  }
+  if (r >= 0)
+    return complete(sock, ReadD, r);
+  else if (errno != EAGAIN)
+    return complete(sock, ReadD, -1);
   struct kevent set {uintptr_t(fd), EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, (void*) usize(sock)};
   timespec ts {};
   kevent(kq, &set, 1, 0, 0, &ts);
@@ -122,18 +123,11 @@ void try_accept(u32 sock, u32 op) {
 
   int r = accept(fd, (sockaddr*) &cli, &len);
   if (r >= 0) {
-    sockets[sock].read = 0;
-    pending.free(op);
     set_nonblocking(r);
-    u32 newsock = sockets.alloc();
-    sockets[newsock] = {u32(r)};
-    return (*cb)(cb, newsock);
-  } else if (errno != EWOULDBLOCK) {
-    println("r=", r, " errno=", errno);
-    sockets[sock].read = 0;
-    pending.free(op);
-    return (*cb)(cb, -1);
-  }
+    u32 newsock = sockets.alloc({u32(r)});
+    return complete(sock, ReadD, newsock);
+  } else if (errno != EWOULDBLOCK)
+    return complete(sock, ReadD, -1);
   println("accept yielded");
   struct kevent set {
     .ident = uintptr_t(fd),
@@ -146,27 +140,23 @@ void try_accept(u32 sock, u32 op) {
 }
 
 void an_accept(unsigned server, void (**cb)(void*, int sock)) {
-  println("an_accept server=", server);
-  check(!sockets[server].read);
-  u32 op = pending.alloc();
-  pending[op] = {Accept, 0, 0, cb};
-  sockets[server].read = op + 1;
+  check(!sockets[server].op[ReadD]);
+  u32 op = pending.alloc({1, 0, 0, cb});
+  sockets[server].op[ReadD] = op + 1;
   try_accept(server, op);
 }
 
 void an_write(u32 sock, char const* src, u32 len, void (**cb)(void*, bool)) {
-  check(!sockets[sock].write);
-  u32 op = pending.alloc();
-  pending[op] = {Write, len, (char*) src, (void (**)(void*, int)) cb};
-  sockets[sock].write = op + 1;
+  check(!sockets[sock].op[WriteD]);
+  u32 op = pending.alloc({0, len, (char*) src, (void (**)(void*, int)) cb});
+  sockets[sock].op[WriteD] = op + 1;
   try_write(sock, op);
 }
 
 void an_read(u32 sock, char* dst, u32 len, void (**cb)(void*, int n)) {
-  check(!sockets[sock].read);
-  u32 op = pending.alloc();
-  pending[op] = {Read, len, dst, cb};
-  sockets[sock].read = op + 1;
+  check(!sockets[sock].op[ReadD]);
+  u32 op = pending.alloc({0, len, dst, cb});
+  sockets[sock].op[ReadD] = op + 1;
   try_read(sock, op);
 }
 
@@ -197,23 +187,21 @@ int an_listen(u16 port) {
     return -1;
   }
 
-  u32 sock = sockets.alloc();
-  sockets[sock] = {acceptor};
-  return sock;
+  return sockets.alloc({acceptor});
 }
 
 void an_close(unsigned sock) {
   check(sockets[sock].fd != ~0u);
   Socket s = sockets[sock];
   sockets[sock].fd = ~0u;
-  if (s.read) {
-    u32 op = s.read - 1;
+  if (s.op[ReadD]) {
+    u32 op = s.op[ReadD] - 1;
     auto cb = pending[op].cb;
     pending.free(op);
     (*cb)(cb, -1);
   }
-  if (s.write) {
-    u32 op = s.write - 1;
+  if (s.op[WriteD]) {
+    u32 op = s.op[WriteD] - 1;
     auto cb = (void (**)(void*, bool)) pending[op].cb;
     pending.free(op);
     (*cb)(cb, true);
@@ -222,37 +210,19 @@ void an_close(unsigned sock) {
   sockets.free(sock);
 }
 
-void handle_event(u32 sock, bool write) {
-  println("got sock=", sock, write ? " write" : " read");
-  if (!write) {
-    u32 op = sockets[sock].read;
-    if (!op)
-      return println("sock=", sock, " found no valid read op");
-    --op;
-    println("sock=", sock, " had valid read op=", op);
-    if (pending[op].op == Accept) {
-      println("read op was an accept");
-      return try_accept(sock, op);
-    } else if (pending[op].op == Read) {
-      println("read op was a read");
-      return try_read(sock, op);
-    } else {
-      println("read op was some unknown thing");
+void handle_event(u32 sock, Direction dir) {
+  u32 op = sockets[sock].op[dir];
+  if (!op--)
+    return println("sock=", sock, " found no valid op");
+  bool server = pending[op].op;
+  if (dir) {
+    if (server)
       abort();
-    }
+    return try_write(sock, op);
   } else {
-    u32 op = sockets[sock].write;
-    if (!op)
-      return println("sock=", sock, " found no valid write op");
-    --op;
-    println("sock=", sock, " had valid write op=", op);
-    if (pending[op].op == Write) {
-      println("read op was a write");
-      return try_write(sock, op);
-    } else {
-      println("write op was some unknown thing");
-      abort();
-    }
+    if (server)
+      return try_accept(sock, op);
+    return try_read(sock, op);
   }
 }
 
@@ -263,9 +233,9 @@ void an_run() {
     check(nev >= 0);
 
     if (e.filter == EVFILT_WRITE) {
-      handle_event(u32(usize(e.udata)), true);
+      handle_event(u32(usize(e.udata)), WriteD);
     } else if (e.filter == EVFILT_READ) {
-      handle_event(u32(usize(e.udata)), false);
+      handle_event(u32(usize(e.udata)), ReadD);
     } else {
       abort();
     }
