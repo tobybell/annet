@@ -18,13 +18,6 @@ enum Direction: u8 {
   ReadD, WriteD
 };
 
-enum Operation : u32 {
-  Read = 0,
-  Write = 0,
-  Accept = 1,
-  Connect = 1,
-};
-
 struct PendingOperation {
   u32 op;
   u32 len;
@@ -41,8 +34,10 @@ template <class T>
 struct FreeList {
   List<T> list;
   u32 free_head {};
+  u32 count {};
 
   u32 alloc(T&& val) {
+    ++count;
     if (free_head) {
       u32 id = free_head - 1;
       free_head = reinterpret_cast<u32&>(list[id]);
@@ -56,6 +51,7 @@ struct FreeList {
   }
 
   void free(u32 id) {
+    --count;
     reinterpret_cast<u32&>(list[id]) = free_head;
     free_head = id + 1;
   }
@@ -139,6 +135,52 @@ void try_accept(u32 sock, u32 op) {
   kevent(kq, &set, 1, 0, 0, &ts);
 }
 
+void try_connect(u32 sock, u32 op) {
+  u32 fd = sockets[sock].fd;
+
+  u32 ip = pending[op].op;
+  u16 port = pending[op].len;
+  println("try_connect ip=", ip, " port=", port);
+
+  sockaddr_in addr;
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(ip);
+  addr.sin_port = htons(port);
+
+  int r = ::connect(fd, (sockaddr*) &addr, sizeof(addr));
+  println("r=", r, " errno=", errno);
+  if (r == 0 || errno == EISCONN)
+    return complete(sock, WriteD, sock);
+  if (errno != EINPROGRESS)
+    return an_close(sock);
+  println("adding to queue");
+  struct kevent set {
+    .ident = uintptr_t(fd),
+    .filter = EVFILT_WRITE,
+    .flags = EV_ADD | EV_ONESHOT,
+    .udata = (void*) usize(sock),
+  };
+  timespec ts {};
+  kevent(kq, &set, 1, 0, 0, &ts);
+}
+
+void an_connect(unsigned ip, unsigned short port, void (**cb)(void*, int sock)) {
+  println("an_connect");
+  if (!kq)
+    kq = kqueue();
+
+  u32 fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0)
+    return (*cb)(cb, -1);
+
+  set_nonblocking(fd);
+
+  u32 sock = sockets.alloc({fd});
+  u32 op = pending.alloc({ip, port, 0, cb});
+  sockets[sock].op[WriteD] = op + 1;
+  try_connect(sock, op);
+}
+
 void an_accept(unsigned server, void (**cb)(void*, int sock)) {
   check(!sockets[server].op[ReadD]);
   u32 op = pending.alloc({1, 0, 0, cb});
@@ -217,7 +259,7 @@ void handle_event(u32 sock, Direction dir) {
   bool server = pending[op].op;
   if (dir) {
     if (server)
-      abort();
+      return try_connect(sock, op);
     return try_write(sock, op);
   } else {
     if (server)
@@ -228,6 +270,9 @@ void handle_event(u32 sock, Direction dir) {
 
 void an_run() {
   for (;;) {
+    if (!pending.count)
+      return;
+
     struct kevent e;
     int nev = kevent(kq, 0, 0, &e, 1, 0);
     check(nev >= 0);

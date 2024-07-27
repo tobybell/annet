@@ -21,15 +21,19 @@ struct Callback {
     f(&(new Record<T> {
            [](void* p, Arg... arg) {
              auto rec = (Record<T>*) p;
-             rec->val(forward<Arg>(arg)...);
+             rec->val(arg...);
              delete rec;
            },
-           ::move(t)})
+           static_cast<T&&>(t)})
           ->f) {}
 };
 
 inline void accept(unsigned server, Callback<int> cb) {
  an_accept(server, cb.f);
+}
+
+inline void connect(unsigned ip, unsigned short port, Callback<int> cb) {
+ an_connect(ip, port, cb.f);
 }
 
 inline void read(unsigned sock, char* dst, unsigned len, Callback<int> cb) {
@@ -39,6 +43,8 @@ inline void read(unsigned sock, char* dst, unsigned len, Callback<int> cb) {
 inline void write(unsigned sock, char const* src, unsigned len, Callback<bool> cb) {
   an_write(sock, src, len, cb.f);
 }
+
+constexpr auto resolve = an_resolve;
 
 constexpr auto listen = an_listen;
 

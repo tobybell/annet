@@ -5,7 +5,7 @@ project(Annet)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-add_library(Annet STATIC print.cc)
+add_library(Annet STATIC print.cc annet-dns.cc)
 target_include_directories(Annet PUBLIC .)
 
 if(APPLE)
@@ -20,4 +20,5 @@ target_link_libraries(EchoServer PRIVATE Annet)
 add_executable(ChatServer example/ChatServer.cc)
 target_link_libraries(ChatServer PRIVATE Annet)
 
-
+add_executable(Client example/Client.cc)
+target_link_libraries(Client PRIVATE Annet)
