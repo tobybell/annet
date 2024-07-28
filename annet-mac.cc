@@ -3,7 +3,6 @@ extern "C" {
 }
 
 #include "common.hh"
-#include "print.hh"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -11,6 +10,8 @@ extern "C" {
 #include <sys/event.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+namespace {
 
 int kq;
 
@@ -114,7 +115,6 @@ void try_read(u32 sock, u32 op) {
 void try_accept(u32 sock, u32 op) {
   sockaddr_in cli;
   socklen_t len = sizeof(cli);
-  println("try_accept sock=", sock, " op=", op);
 
   u32 fd = sockets[sock].fd;
   auto cb = pending[op].cb;
@@ -126,7 +126,6 @@ void try_accept(u32 sock, u32 op) {
     return complete(sock, ReadD, newsock);
   } else if (errno != EWOULDBLOCK)
     return complete(sock, ReadD, -1);
-  println("accept yielded");
   add_filter(fd, EVFILT_READ, sock);
 }
 
@@ -135,7 +134,6 @@ void try_connect(u32 sock, u32 op) {
 
   u32 ip = pending[op].op;
   u16 port = pending[op].len;
-  println("try_connect ip=", ip, " port=", port);
 
   sockaddr_in addr;
   addr.sin_family = AF_INET;
@@ -143,7 +141,6 @@ void try_connect(u32 sock, u32 op) {
   addr.sin_port = htons(port);
 
   int r = ::connect(fd, (sockaddr*) &addr, sizeof(addr));
-  println("r=", r, " errno=", errno);
   if (r == 0 || errno == EISCONN)
     return complete(sock, WriteD, sock);
   if (errno != EINPROGRESS)
@@ -151,10 +148,11 @@ void try_connect(u32 sock, u32 op) {
   add_filter(fd, EVFILT_WRITE, sock);
 }
 
+}  // namespace
+
 void an_init() {}
 
 void an_connect(unsigned ip, unsigned short port, void (**cb)(void*, int sock)) {
-  println("an_connect");
   if (!kq)
     kq = kqueue();
 
@@ -244,7 +242,7 @@ void an_close(unsigned sock) {
 void handle_event(u32 sock, Direction dir) {
   u32 op = sockets[sock].op[dir];
   if (!op--)
-    return println("sock=", sock, " found no valid op");
+    return;
   bool server = pending[op].op;
   if (dir) {
     if (server)
