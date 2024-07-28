@@ -32,6 +32,7 @@ struct Socket {
   u32 r_len;
   u32 w_len;
   bool server;
+  bool connecting;
 
   void accept(void (**cb)(void*, int sock)) {
     println("accept fd=", fd, " cb=", (void*) cb);
@@ -134,6 +135,35 @@ void Socket::try_accept() {
   }
 }
 
+//void try_connect() {
+//  u32 fd = sockets[sock].fd;
+//
+//  u32 ip = pending[op].op;
+//  u16 port = pending[op].len;
+//  println("try_connect ip=", ip, " port=", port);
+//
+//  sockaddr_in addr;
+//  addr.sin_family = AF_INET;
+//  addr.sin_addr.s_addr = htonl(ip);
+//  addr.sin_port = htons(port);
+//
+//  int r = ::connect(fd, (sockaddr*) &addr, sizeof(addr));
+//  println("r=", r, " errno=", errno);
+//  if (r == 0 || errno == EISCONN)
+//    return complete(sock, WriteD, sock);
+//  if (errno != EINPROGRESS)
+//    return an_close(sock);
+//  println("adding to queue");
+//  struct kevent set {
+//    .ident = uintptr_t(fd),
+//    .filter = EVFILT_WRITE,
+//    .flags = EV_ADD | EV_ONESHOT,
+//    .udata = (void*) usize(sock),
+//  };
+//  timespec ts {};
+//  kevent(kq, &set, 1, 0, 0, &ts);
+//}
+
 void an_accept(unsigned server, void (**cb)(void*, int sock)) {
   sockets[server].accept(cb);
 }
@@ -182,6 +212,50 @@ int an_listen(u16 port) {
   return ans;
 }
 
+int try_connect(unsigned sock, unsigned ip, unsigned short port) {
+  unsigned fd = sockets[sock].fd;
+  sockaddr_in addr;
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(ip);
+  addr.sin_port = htons(port);
+  int r = ::connect(fd, (sockaddr*) &addr, sizeof(addr));
+  if (!r || errno == EISCONN)
+    return sock + 1;
+  if (errno == EINPROGRESS)
+    return -1;
+  return 0;
+}
+
+void an_connect(unsigned ip, unsigned short port, void (**cb)(void*, int sock)) {
+  if (!ep)
+    ep = epoll_create(1);
+
+  u32 fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0)
+    return (*cb)(cb, -1);
+
+  set_nonblocking(fd);
+
+  u32 sock = alloc_sock();
+  sockets[sock] = Socket {};
+  sockets[sock].fd = fd;
+
+  epoll_event ev;
+  ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+  ev.data.u32 = sock;
+  check(!epoll_ctl(ep, EPOLL_CTL_ADD, fd, &ev));
+
+  auto r = try_connect(sock, ip, port);
+  if (r < 0) {
+    sockets[sock].connecting = true;
+    sockets[sock].w_buf = (char*) usize(port);
+    sockets[sock].w_len = ip;
+    sockets[sock].w_done = (void (**)(void*, bool)) cb;
+    return;
+  }
+  (*cb)(cb, r - 1);
+}
+
 void an_close(unsigned id) {
   auto& sock = sockets[id];
   if (sock.server) {
@@ -208,21 +282,25 @@ void an_run() {
       continue;
     auto id = e.data.u32;
     auto& sock = sockets[id];
-    if (sock.server) {
-      println("got server event id=", id);
-      if (e.events & EPOLLIN) {
+    if (e.events & EPOLLIN) {
+      if (sock.server) {
         if (sock.r_done)
           sock.try_accept();
       } else {
-        println("unknown server event");
-      }
-    } else {
-      println("got client event id=", id);
-      if (e.events & EPOLLIN) {
         if (sock.r_done)
           sock.try_read();
       }
-      if (e.events & EPOLLOUT) {
+    }
+    if (e.events & EPOLLOUT) {
+      if (sock.connecting) {
+        auto cb = (void (**)(void*, int)) sock.w_done;
+        auto ans = try_connect(id, sock.w_len, u16(usize(sock.w_buf)));
+        if (ans >= 0) {
+          sock.w_done = 0;
+          sock.connecting = 0;
+          (*cb)(cb, ans - 1);
+        }
+      } else {
         if (sock.w_done)
           sock.try_write();
       }
