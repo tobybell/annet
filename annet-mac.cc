@@ -77,6 +77,12 @@ void complete(u32 sock, Direction dir, int result) {
   return (*cb)(cb, result);
 }
 
+void add_filter(u32 fd, int16_t filt, usize udata) {
+  struct kevent set {usize(fd), filt, EV_ADD | EV_ONESHOT, 0, 0, (void*) udata};
+  timespec ts {};
+  kevent(kq, &set, 1, 0, 0, &ts);
+}
+
 void try_write(u32 sock, u32 op) {
   i32 fd = sockets[sock].fd;
   auto p = pending[op];
@@ -90,9 +96,7 @@ void try_write(u32 sock, u32 op) {
     pending[op].len -= r;
   } else if (errno != EAGAIN)
     return complete(sock, WriteD, 1);
-  struct kevent set {uintptr_t(fd), EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, (void*) usize(sock)};
-  timespec ts {};
-  kevent(kq, &set, 1, 0, 0, &ts);
+  add_filter(fd, EVFILT_WRITE, sock);
 }
 
 void try_read(u32 sock, u32 op) {
@@ -104,9 +108,7 @@ void try_read(u32 sock, u32 op) {
     return complete(sock, ReadD, r);
   else if (errno != EAGAIN)
     return complete(sock, ReadD, -1);
-  struct kevent set {uintptr_t(fd), EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, (void*) usize(sock)};
-  timespec ts {};
-  kevent(kq, &set, 1, 0, 0, &ts);
+  add_filter(fd, EVFILT_READ, sock);
 }
 
 void try_accept(u32 sock, u32 op) {
@@ -125,14 +127,7 @@ void try_accept(u32 sock, u32 op) {
   } else if (errno != EWOULDBLOCK)
     return complete(sock, ReadD, -1);
   println("accept yielded");
-  struct kevent set {
-    .ident = uintptr_t(fd),
-    .filter = EVFILT_READ,
-    .flags = EV_ADD | EV_ONESHOT,
-    .udata = (void*) usize(sock),
-  };
-  timespec ts {};
-  kevent(kq, &set, 1, 0, 0, &ts);
+  add_filter(fd, EVFILT_READ, sock);
 }
 
 void try_connect(u32 sock, u32 op) {
@@ -153,15 +148,7 @@ void try_connect(u32 sock, u32 op) {
     return complete(sock, WriteD, sock);
   if (errno != EINPROGRESS)
     return an_close(sock);
-  println("adding to queue");
-  struct kevent set {
-    .ident = uintptr_t(fd),
-    .filter = EVFILT_WRITE,
-    .flags = EV_ADD | EV_ONESHOT,
-    .udata = (void*) usize(sock),
-  };
-  timespec ts {};
-  kevent(kq, &set, 1, 0, 0, &ts);
+  add_filter(fd, EVFILT_WRITE, sock);
 }
 
 void an_init() {}
