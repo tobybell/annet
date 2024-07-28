@@ -1,6 +1,7 @@
 #include <annet.hh>
 
-#include <print.hh>
+#include <stdio.h>
+#include <stdlib.h>
 
 void read_response(unsigned sock, char* buf) {
   an::read(sock, buf, 1024, [sock, buf](int n) {
@@ -23,10 +24,10 @@ void write_request(unsigned sock) {
 int main() {
   unsigned ip = an::resolve("google.com");
   if (!ip)
-    return println("couldn't resolve"), 0;
+    return printf("couldn't resolve"), 0;
   an::connect(ip, 80, [](int r) {
     if (r < 0)
-      return println("couldn't connect");
+      return (void) printf("couldn't connect");
     write_request(r);
   });
   an::run();
