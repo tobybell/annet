@@ -226,6 +226,8 @@ int try_connect(unsigned sock, unsigned ip, unsigned short port) {
   return 0;
 }
 
+void an_init() {}
+
 void an_connect(unsigned ip, unsigned short port, void (**cb)(void*, int sock)) {
   if (!ep)
     ep = epoll_create(1);

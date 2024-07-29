@@ -44,6 +44,8 @@ inline void write(unsigned sock, char const* src, unsigned len, Callback<bool> c
   an_write(sock, src, len, cb.f);
 }
 
+constexpr auto init = an_init;
+
 constexpr auto resolve = an_resolve;
 
 constexpr auto listen = an_listen;

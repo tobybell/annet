@@ -1,7 +1,7 @@
-#include "common.hh"
-#include "print.hh"
-
 #include "annet.hh"
+
+#include "msvc.hh"
+#include "print.hh"
 
 struct Outgoing {
   String message;
@@ -13,7 +13,7 @@ struct Outgoing {
 struct Client {
   u32 sock;
   Outgoing* head;
-  bool sending {};
+  bool sending;
 };
 
 u32 check_listen(u16 port) {

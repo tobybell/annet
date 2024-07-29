@@ -22,10 +22,12 @@ void write_request(unsigned sock) {
 }
 
 int main() {
+  an::init();
   unsigned ip = an::resolve("google.com");
   if (!ip)
     return printf("couldn't resolve"), 0;
   an::connect(ip, 80, [](int r) {
+    printf("got connect! r=%d\n", r);
     if (r < 0)
       return (void) printf("couldn't connect");
     write_request(r);

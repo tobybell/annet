@@ -2,6 +2,8 @@
 
 unsigned an_resolve(char const* domain);
 
+void an_init();
+
 int an_listen(
   unsigned short port);
 

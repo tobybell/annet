@@ -1,7 +1,5 @@
 #pragma once
 
-#include "common.hh"
-
 struct Print {
   List<char> chars;
 };
@@ -10,7 +8,7 @@ void print(u8 x, Print&);
 void print(u16 x, Print&);
 void print(u32 x, Print&);
 void print(u64 x, Print&);
-inline void print(usize x, Print& p) { print(u64(x), p); }
+inline void print(unsigned long x, Print& p) { print(u64(x), p); }
 void print(i8 x, Print&);
 void print(i16 x, Print&);
 void print(i32 x, Print&);

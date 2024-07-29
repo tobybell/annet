@@ -164,6 +164,8 @@ void try_connect(u32 sock, u32 op) {
   kevent(kq, &set, 1, 0, 0, &ts);
 }
 
+void an_init() {}
+
 void an_connect(unsigned ip, unsigned short port, void (**cb)(void*, int sock)) {
   println("an_connect");
   if (!kq)

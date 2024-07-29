@@ -1,10 +1,12 @@
+#include "msvc.hh"
 #include "print.hh"
 
-#include <unistd.h>
-#include <cstdio>
+#include <Windows.h>
+#include <stdio.h>
 
 void write_cerr(Str str) {
-  write(1, str.base, str.size);
+  static HANDLE h_stderr = GetStdHandle(STD_ERROR_HANDLE);
+  WriteFile(h_stderr, str.base, str.size, 0, 0);
 }
 
 template <class T>
