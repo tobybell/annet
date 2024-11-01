@@ -1,13 +1,7 @@
-#include "msvc.hh"
+#include "platform.hh"
 #include "print.hh"
 
-#include <Windows.h>
 #include <stdio.h>
-
-void write_cerr(Str str) {
-  static HANDLE h_stderr = GetStdHandle(STD_ERROR_HANDLE);
-  WriteFile(h_stderr, str.base, str.size, 0, 0);
-}
 
 template <class T>
 void do_snprint(Print& s, u32 max, char const* fmt, T const& arg) {

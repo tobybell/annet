@@ -29,11 +29,11 @@ struct Callback {
 };
 
 inline void accept(unsigned server, Callback<int> cb) {
- an_accept(server, cb.f);
+  an_accept(server, cb.f);
 }
 
 inline void connect(unsigned ip, unsigned short port, Callback<int> cb) {
- an_connect(ip, port, cb.f);
+  an_connect(ip, port, cb.f);
 }
 
 inline void read(unsigned sock, char* dst, unsigned len, Callback<int> cb) {

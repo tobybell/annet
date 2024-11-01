@@ -2,8 +2,9 @@ extern "C" {
 #include "annet.h"
 }
 
-#include <ws2tcpip.h>
 #include <stdio.h>
+//#include <ws2tcpip.h>
+#include <netdb.h>
 
 unsigned an_resolve(char const* domain) {
   struct addrinfo hint {}, *result;

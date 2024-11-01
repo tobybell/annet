@@ -11,6 +11,11 @@ using u16 = unsigned short;
 
 #include <ws2tcpip.h>
 
+void write_cerr(Str str) {
+  static HANDLE h_stderr = GetStdHandle(STD_ERROR_HANDLE);
+  WriteFile(h_stderr, str.base, str.size, 0, 0);
+}
+
 void an_init() {
   WSADATA wsa_data;
   check(!WSAStartup(MAKEWORD(2, 2), &wsa_data));

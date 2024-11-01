@@ -150,6 +150,10 @@ void try_connect(u32 sock, u32 op) {
 
 }  // namespace
 
+void write_cerr(Str str) {
+  check(::write(2, str.base, str.size) == str.size);
+}
+
 void an_init() {}
 
 void an_connect(unsigned ip, unsigned short port, void (**cb)(void*, int sock)) {

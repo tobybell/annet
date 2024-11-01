@@ -1,6 +1,6 @@
 #include "annet.hh"
 
-#include "msvc.hh"
+#include "common.hh"
 #include "print.hh"
 
 struct Outgoing {
