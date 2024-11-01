@@ -1,5 +1,10 @@
 extern "C" {
 #include "annet.h"
+
+unsigned raw_accept(unsigned server);
+unsigned raw_connect(unsigned ip, unsigned short port);
+unsigned raw_read(unsigned sock, char* dst, unsigned len);
+unsigned raw_write(unsigned sock, char const* src, unsigned len);
 }
 
 #include "common.hh"
@@ -156,7 +161,7 @@ void write_cerr(Str str) {
 
 void an_init() {}
 
-void an_connect(unsigned ip, unsigned short port, void (**cb)(void*, int sock)) {
+void raw_connect(unsigned ip, unsigned short port) {
   if (!kq)
     kq = kqueue();
 

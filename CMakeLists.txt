@@ -5,7 +5,7 @@ project(Annet)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-add_library(Annet STATIC print.cc annet-dns.cc)
+add_library(Annet STATIC adapter.cc print.cc annet-dns.cc)
 target_include_directories(Annet PUBLIC .)
 
 if(MSVC)
