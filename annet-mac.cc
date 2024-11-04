@@ -186,6 +186,12 @@ void an_write(u32 sock, char const* src, u32 len, void (**cb)(void*, bool)) {
   try_write(sock, op);
 }
 
+void an_write_done(u32 sock) {
+  check(!sockets[sock].op[WriteD]);
+  u32 fd = sockets[sock].fd;
+  check(!::shutdown(fd, SHUT_WR));
+}
+
 void an_read(u32 sock, char* dst, u32 len, void (**cb)(void*, int n)) {
   check(!sockets[sock].op[ReadD]);
   u32 op = pending.alloc({0, len, dst, cb});

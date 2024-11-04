@@ -25,5 +25,8 @@ target_link_libraries(EchoServer PRIVATE Annet)
 add_executable(ChatServer example/ChatServer.cc)
 target_link_libraries(ChatServer PRIVATE Annet)
 
+add_executable(WebServer example/WebServer.cc)
+target_link_libraries(WebServer PRIVATE Annet)
+
 add_executable(Client example/Client.cc)
 target_link_libraries(Client PRIVATE Annet)

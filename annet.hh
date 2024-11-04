@@ -52,6 +52,8 @@ constexpr auto listen = an_listen;
 
 constexpr auto close = an_close;
 
+constexpr auto write_done = an_write_done;
+
 constexpr auto run = an_run;
 
 }

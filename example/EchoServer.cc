@@ -23,7 +23,7 @@ void echo_client(u32 client, char* buf) {
 void accept_client(u32 server) {
   an::accept(server, [server](i32 sock) {
     if (sock < 0)
-      return printf("accept error\n");
+      return (void) printf("accept error\n");
     echo_client(u32(sock), (char*) malloc(1024));
     accept_client(server);
   });

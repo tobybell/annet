@@ -19,7 +19,8 @@ void an_read(
 void an_write(
   unsigned sock, char const* src, unsigned len, void (**cb)(void*, bool err));
 
-void an_close(
-  unsigned sock);
+void an_close(unsigned sock);
+
+void an_write_done(unsigned sock);
 
 void an_run();
